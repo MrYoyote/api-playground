@@ -8,10 +8,12 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState(null);
   const [time, setTime] = useState(null);
+  const [history, setHistory] = useState([]);
 
   const envoyerRequete = async (url) => {
     setErreur("");
     setResultat("");
+    setHistory((prev) => [url, ...prev]);
     setLoading(true);
     setStatus(null);
     setTime(null);
@@ -39,7 +41,7 @@ function App() {
     <div style={{ padding: "40px", fontFamily: "Arial" }}>
       <h1>API Playground</h1>
 
-      <RequestForm onSend={envoyerRequete} />
+      <RequestForm onSend={envoyerRequete} history={history} />
 
        <br />
        <ResponseViewer
