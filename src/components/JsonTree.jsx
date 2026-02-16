@@ -13,11 +13,14 @@ function escapeRegExp(s) {
 }
 
 // Mot entier (borne de mot) : name match "name" mais pas "username"
-function includesWholeWord(text, query) {
-  const q = String(query ?? "").trim();
+function keyMatches(text, query) {
+  const q = String(query ?? "").trim().toLowerCase();
+  const t = String(text ?? "").toLowerCase();
   if (!q) return false;
-  const re = new RegExp(`\\b${escapeRegExp(q)}\\b`, "i");
-  return re.test(String(text ?? ""));
+
+  // match si mot entier OU si la clé commence par query
+  if (t === q) return true;
+  return t.startsWith(q);
 }
 
 // Surlignage "contient" (toutes occurrences)
@@ -45,12 +48,14 @@ function highlightAll(text, query) {
       <span
         key={`${idx}-${q}`}
         style={{
-          background: "#000000",
-          color: "#e61111",
-          borderRadius: "4px",
+          background: "rgba(124, 131, 255, 0.25)",
+          color: "inherit",
+          borderRadius: "6px",
           padding: "0 3px",
-          fontWeight: 800,
+          fontWeight: 700,
+          boxShadow: "inset 0 0 0 1px rgba(124, 131, 255, 0.25)",
         }}
+
       >
         {s.slice(idx, idx + q.length)}
       </span>
@@ -82,7 +87,7 @@ function highlightWholeWord(text, query) {
       <span
         key={`${start}-${end}`}
         style={{
-          background: "#FFEB3B",
+          background: "#41ff3b",
           color: "#000",
           borderRadius: "4px",
           padding: "0 3px",
@@ -168,8 +173,10 @@ function buildSearchIndex(data, query) {
     for (const [k, v] of Object.entries(value)) {
       const childPath = `${path}.${k}`;
 
-      // ✅ clés : mot entier
-      if (includesWholeWord(k, query)) addMatch(childPath);
+      // ✅ si la clé match, on match le noeud (childPath) ET on force l'ouverture de ses parents
+      if (keyMatches(k, query)) {
+        addMatch(childPath);
+      }
 
       walk(v, childPath);
     }
@@ -376,7 +383,7 @@ function JsonTree({
 
       // clés : mot entier, valeurs : contient
       const highlightLine =
-        q && (includesWholeWord(name, query) || normalize(value).includes(q));
+        q && (keyMatches(name, query) || normalize(value).includes(q));
 
       return (
         <Row key={path} depth={depth} path={path} active={active}>
