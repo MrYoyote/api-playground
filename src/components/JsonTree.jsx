@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 
 function isObject(value) {
   return value !== null && typeof value === "object";
@@ -80,6 +80,11 @@ function JsonTree({ data, query }) {
 
   // overrides manuels: path -> bool
   const [overrides, setOverrides] = useState({});
+  useEffect(() => {
+    if (normalize(query).trim()) setOverrides({});
+  }, [query]);
+
+
 
   const computeOpen = (path) => {
     if (Object.prototype.hasOwnProperty.call(overrides, path)) return overrides[path];
@@ -144,7 +149,7 @@ function JsonTree({ data, query }) {
             {open ? "−" : "+"}
           </button>
 
-          <span style={{ color: matched ? "#5eff00" : "#B39DDB", fontWeight: matched ? 700 : 400, opacity: 0.95 }}>
+          <span style={{ color: matched ? "#fff" : "#B39DDB", fontWeight: matched ? 700 : 400, opacity: 0.95 }}>
             {name}:
           </span>{" "}
           <span style={{ opacity: 0.9 }}>{preview}</span>
