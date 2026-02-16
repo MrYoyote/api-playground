@@ -13,7 +13,10 @@ function App() {
   const envoyerRequete = async (url) => {
     setErreur("");
     setResultat("");
-    setHistory((prev) => [url, ...prev]);
+    setHistory((prev) => {{
+      const filtered = prev.filter((item) => item !== url);
+      return [url, ...filtered].slice(0, 10);
+    }});
     setLoading(true);
     setStatus(null);
     setTime(null);
