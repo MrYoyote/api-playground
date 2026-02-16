@@ -1,8 +1,29 @@
 import { useEffect, useMemo, useState } from "react";
 import JsonTree from "./JsonTree";
 
-function ResponseViewer({ data, error, loading, status, time }) {
+function statusBadgeStyle(code) {
+  if (!code) return { background: "rgba(255,255,255,0.06)", border: "1px solid var(--border)" };
+  if (code >= 200 && code < 300) return { background: "rgba(76, 175, 80, 0.18)", border: "1px solid rgba(76,175,80,0.35)" };
+  if (code >= 300 && code < 400) return { background: "rgba(255, 193, 7, 0.18)", border: "1px solid rgba(255,193,7,0.35)" };
+  if (code >= 400 && code < 500) return { background: "rgba(255, 152, 0, 0.18)", border: "1px solid rgba(255,152,0,0.35)" };
+  return { background: "rgba(244, 67, 54, 0.18)", border: "1px solid rgba(244,67,54,0.35)" };
+}
+
+function downloadJson(filename, text) {
+  const blob = new Blob([text], { type: "application/json;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+function ResponseViewer({ data, error, loading, status, time, onClear }) {
   const [query, setQuery] = useState("");
+  const [view, setView] = useState("tree"); // "tree" | "raw"
 
   const [matchPaths, setMatchPaths] = useState([]);
   const [activeIndex, setActiveIndex] = useState(0);
@@ -54,14 +75,56 @@ function ResponseViewer({ data, error, loading, status, time }) {
     setTreeActionId((x) => x + 1);
   };
 
+  const hasAny = loading || error || data || status || time;
+  if (!hasAny) return null;
+
   return (
     <div>
-      {loading && <p>Chargement...</p>}
-      {status && <p>Status HTTP: {status}</p>}
-      {time && <p>Temps de réponse: {time} ms</p>}
-      {error && <p style={{ color: "red" }}>Erreur: {error}</p>}
+      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+        <div
+          style={{
+            padding: "6px 10px",
+            borderRadius: 12,
+            fontWeight: 800,
+            ...statusBadgeStyle(status),
+          }}
+          title="Status HTTP"
+        >
+          Status : {status ?? "—"}
+        </div>
 
-      {parsed && (
+        <div style={{ opacity: 0.9 }}>Temps : {time ?? "—"} ms</div>
+
+        <div style={{ display: "flex", gap: 8, marginLeft: "auto", flexWrap: "wrap" }}>
+          <button onClick={() => setView("tree")} disabled={view === "tree"}>
+            Tree
+          </button>
+          <button onClick={() => setView("raw")} disabled={view === "raw"}>
+            Raw
+          </button>
+
+          <button
+            onClick={() => {
+              if (!data) return;
+              downloadJson(`reponse-${Date.now()}.json`, data);
+            }}
+            disabled={!data}
+            title="Télécharger la réponse"
+          >
+            Télécharger JSON
+          </button>
+
+          {/* ✅ nouveau bouton clear */}
+          <button onClick={onClear} disabled={!data && !error && !status && !time} title="Effacer la réponse affichée">
+            Effacer
+          </button>
+        </div>
+      </div>
+
+      {loading && <p>Chargement...</p>}
+      {error && <p style={{ color: "red", whiteSpace: "pre-wrap" }}>Erreur: {error}</p>}
+
+      {view === "tree" && parsed && (
         <div style={{ margin: "12px 0" }}>
           <input
             value={query}
@@ -73,26 +136,10 @@ function ResponseViewer({ data, error, loading, status, time }) {
                 else onNext();
               }
             }}
-            placeholder="Rechercher (clé ou valeur)... (Entrée = Suivant, Shift+Entrée = Précédent)"
-            style={{
-              width: "100%",
-              padding: "10px",
-              borderRadius: "8px",
-              border: "1px solid #555",
-              background: "#1b1b1b",
-              color: "#fff",
-            }}
+            placeholder="Rechercher (Entrée = Suivant, Shift+Entrée = Précédent)"
           />
 
-          <div
-            style={{
-              display: "flex",
-              gap: "10px",
-              flexWrap: "wrap",
-              marginTop: "10px",
-              alignItems: "center",
-            }}
-          >
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 10, alignItems: "center" }}>
             <button onClick={doExpandAll}>Développer tout</button>
             <button onClick={doCollapseAll}>Réduire tout</button>
 
@@ -103,44 +150,64 @@ function ResponseViewer({ data, error, loading, status, time }) {
               Suivant
             </button>
 
-            <div style={{ opacity: 0.9 }}>
-              {canNavigate ? `${safeIndex + 1}/${total}` : "0/0"}
-            </div>
+            <div style={{ opacity: 0.9 }}>{canNavigate ? `${safeIndex + 1}/${total}` : "0/0"}</div>
 
-            {query && <button onClick={() => setQuery("")}>Effacer la recherche</button>}
+            {query && <button onClick={() => setQuery("")}>Effacer recherche</button>}
           </div>
         </div>
       )}
 
-      {parsed ? (
-        <div
-          style={{
-            background: "#111",
-            color: "#eee",
-            padding: "20px",
-            borderRadius: "8px",
-            overflowX: "auto",
-            maxHeight: "60vh",
-          }}
-        >
-          <JsonTree
-            data={parsed}
-            query={query}
-            onMatchesChange={setMatchPaths}
-            activeMatchPath={activeMatchPath}
-            treeActionId={treeActionId}
-            treeAction={treeAction}
-          />
-        </div>
+      {view === "tree" ? (
+        parsed ? (
+          <div
+            style={{
+              background: "var(--panel)",
+              border: "1px solid var(--border)",
+              color: "var(--text)",
+              padding: 18,
+              borderRadius: 14,
+              overflowX: "auto",
+              maxHeight: "60vh",
+            }}
+          >
+            <JsonTree
+              data={parsed}
+              query={query}
+              onMatchesChange={setMatchPaths}
+              activeMatchPath={activeMatchPath}
+              treeActionId={treeActionId}
+              treeAction={treeAction}
+            />
+          </div>
+        ) : (
+          <pre
+            style={{
+              background: "var(--panel)",
+              border: "1px solid var(--border)",
+              color: "var(--text)",
+              padding: 18,
+              borderRadius: 14,
+              overflowX: "auto",
+              maxHeight: "60vh",
+              whiteSpace: "pre-wrap",
+              wordBreak: "break-word",
+            }}
+          >
+            {data}
+          </pre>
+        )
       ) : (
         <pre
           style={{
-            background: "#111",
-            color: "#eee",
-            padding: "20px",
-            borderRadius: "8px",
+            background: "var(--panel)",
+            border: "1px solid var(--border)",
+            color: "var(--text)",
+            padding: 18,
+            borderRadius: 14,
             overflowX: "auto",
             maxHeight: "60vh",
+            whiteSpace: "pre-wrap",
+            wordBreak: "break-word",
           }}
         >
           {data}
