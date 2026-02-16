@@ -1,6 +1,6 @@
 import { useState } from 'react';
 
-function RequestForm({ onSend, history }) {
+function RequestForm({ onSend, history, onClearHistory }) {
   const [url, setUrl] = useState('');
 
   return (
@@ -28,14 +28,19 @@ function RequestForm({ onSend, history }) {
 
         {history.length > 0 && (
             <div style={{ marginTop: '20px' }}>
-                <h3>Historique des requêtes:</h3>
-                {history.map((item, index) => (
-                    <div key={index}>
-                        <button onClick={() => onSend(item) }>
-                            {item}
-                        </button>
-                    </div>
-                ))}
+                <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+                    <h3>Historique des requêtes:</h3>
+                    <button onClick={onClearHistory}>Effacer l'historique</button>
+                </div>
+                <div style={{ marginTop: "10px" }}>
+                    {history.map((item, index) => (
+                        <div key={index}>
+                            <button onClick={() => onSend(item) }>
+                                {item}
+                            </button>
+                        </div>
+                    ))}
+                </div>
             </div>
         )}
     </div>

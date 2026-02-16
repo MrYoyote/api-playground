@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from 'react';
 import RequestForm from "./components/RequestForm";
 import ResponseViewer from "./components/ResponseViewer";
 
@@ -8,7 +8,20 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState(null);
   const [time, setTime] = useState(null);
-  const [history, setHistory] = useState([]);
+  const [history, setHistory] = useState(() => {
+    try {
+      const saved = localStorage.getItem("api-playground-history");
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  useEffect(() => {
+    localStorage.setItem("api-playground-history", JSON.stringify(history));
+  }, [history]);
+
+  const clearHistory = () => setHistory([]);
 
   const envoyerRequete = async (url) => {
     setErreur("");
@@ -40,20 +53,28 @@ function App() {
     }
   };
 
+  const hasResponse = loading || erreur || resultat || status || time;
+
   return (
     <div style={{ padding: "40px", fontFamily: "Arial" }}>
       <h1>API Playground</h1>
 
-      <RequestForm onSend={envoyerRequete} history={history} />
-
-       <br />
-       <ResponseViewer
-        data={resultat}
-        error={erreur}
-        loading={loading}
-        status={status}
-        time={time}
+      <RequestForm 
+        onSend={envoyerRequete} 
+        history={history} 
+        onClearHistory={clearHistory} 
       />
+
+      <br />
+      {hasResponse && (
+        <ResponseViewer
+          data={resultat}
+          error={erreur}
+          loading={loading}
+          status={status}
+          time={time}
+        />
+      )}
     </div>
   );
 }
