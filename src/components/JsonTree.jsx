@@ -8,10 +8,121 @@ function normalize(str) {
   return String(str ?? "").toLowerCase();
 }
 
+function escapeRegExp(s) {
+  return String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+// Mot entier (borne de mot) : name match "name" mais pas "username"
+function includesWholeWord(text, query) {
+  const q = String(query ?? "").trim();
+  if (!q) return false;
+  const re = new RegExp(`\\b${escapeRegExp(q)}\\b`, "i");
+  return re.test(String(text ?? ""));
+}
+
+// Surlignage "contient" (toutes occurrences)
+function highlightAll(text, query) {
+  const q = String(query ?? "").trim();
+  const s = String(text ?? "");
+
+  if (!q) return s;
+
+  const lowerS = s.toLowerCase();
+  const lowerQ = q.toLowerCase();
+
+  const parts = [];
+  let i = 0;
+
+  while (true) {
+    const idx = lowerS.indexOf(lowerQ, i);
+    if (idx === -1) {
+      parts.push(s.slice(i));
+      break;
+    }
+    if (idx > i) parts.push(s.slice(i, idx));
+
+    parts.push(
+      <span
+        key={`${idx}-${q}`}
+        style={{
+          background: "#000000",
+          color: "#e61111",
+          borderRadius: "4px",
+          padding: "0 3px",
+          fontWeight: 800,
+        }}
+      >
+        {s.slice(idx, idx + q.length)}
+      </span>
+    );
+
+    i = idx + q.length;
+  }
+
+  return <>{parts}</>;
+}
+
+// Surlignage "mot entier" (toutes occurrences)
+function highlightWholeWord(text, query) {
+  const q = String(query ?? "").trim();
+  const s = String(text ?? "");
+  if (!q) return s;
+
+  const re = new RegExp(`\\b${escapeRegExp(q)}\\b`, "gi");
+  const parts = [];
+  let last = 0;
+
+  for (const match of s.matchAll(re)) {
+    const start = match.index ?? 0;
+    const end = start + match[0].length;
+
+    if (start > last) parts.push(s.slice(last, start));
+
+    parts.push(
+      <span
+        key={`${start}-${end}`}
+        style={{
+          background: "#FFEB3B",
+          color: "#000",
+          borderRadius: "4px",
+          padding: "0 3px",
+          fontWeight: 800,
+        }}
+      >
+        {s.slice(start, end)}
+      </span>
+    );
+
+    last = end;
+  }
+
+  parts.push(s.slice(last));
+  return <>{parts}</>;
+}
+
+async function copyToClipboard(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    try {
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      document.body.removeChild(ta);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+}
+
 /**
  * Recherche dans tout l'arbre :
- * - match sur les clés
- * - match sur les valeurs primitives
+ * - match sur les clés (mot entier)
+ * - match sur les valeurs primitives (contient)
  * Retourne:
  * - matchPaths: liste des paths matchés (ordre de parcours)
  * - matchSet: set des paths matchés
@@ -56,7 +167,10 @@ function buildSearchIndex(data, query) {
 
     for (const [k, v] of Object.entries(value)) {
       const childPath = `${path}.${k}`;
-      if (normalize(k).includes(q)) addMatch(childPath);
+
+      // ✅ clés : mot entier
+      if (includesWholeWord(k, query)) addMatch(childPath);
+
       walk(v, childPath);
     }
   };
@@ -105,24 +219,27 @@ function JsonTree({
     [data, query]
   );
 
-  // ✅ Nouveau modèle robuste
+  // modèle robuste
   const [forcedOpen, setForcedOpen] = useState(() => new Set());
   const [forcedClosed, setForcedClosed] = useState(() => new Set());
 
+  // hover pour bouton copier
+  const [hoveredPath, setHoveredPath] = useState(null);
+
+  // Remonter la liste des matchs (sans boucle infinie)
+  useEffect(() => {
+    onMatchesChange?.(matchPaths);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query, data]);
+
+  // ✅ Quand une recherche démarre, on enlève les fermetures forcées (sinon ça bloque l'auto-open)
   useEffect(() => {
     if (normalize(query).trim()) {
-      setForcedOpen(new Set());
       setForcedClosed(new Set());
     }
   }, [query]);
 
-
-  // Informer le parent (ResponseViewer) des matchs
-  useEffect(() => {
-    onMatchesChange?.(matchPaths);
-  }, [query, data]);
-
-  // Auto-open renforcé: si on a un match "actif", on force l'ouverture de ses parents
+  // Auto-open renforcé: match actif => ouvrir ses parents
   const autoOpenWithActiveParents = useMemo(() => {
     if (!q || !activeMatchPath) return autoOpenSet;
 
@@ -151,7 +268,7 @@ function JsonTree({
     const currentlyOpen = computeOpen(path);
 
     if (currentlyOpen) {
-      // fermer -> forcedClosed
+      // fermer
       setForcedOpen((prev) => {
         const next = new Set(prev);
         next.delete(path);
@@ -163,7 +280,7 @@ function JsonTree({
         return next;
       });
     } else {
-      // ouvrir -> forcedOpen
+      // ouvrir
       setForcedClosed((prev) => {
         const next = new Set(prev);
         next.delete(path);
@@ -177,7 +294,7 @@ function JsonTree({
     }
   };
 
-  // Appliquer actions "expand/collapse all"
+  // expand/collapse all
   useEffect(() => {
     if (!treeActionId || !treeAction) return;
 
@@ -185,11 +302,10 @@ function JsonTree({
 
     if (treeAction === "expandAll") {
       setForcedClosed(new Set());
-      setForcedOpen(new Set(containers)); // tout ouvert
+      setForcedOpen(new Set(containers));
     }
 
     if (treeAction === "collapseAll") {
-      // tout fermé sauf root
       const closed = new Set(containers);
       closed.delete("root");
 
@@ -198,27 +314,58 @@ function JsonTree({
     }
   }, [treeActionId, treeAction, data]);
 
-  // Scroll sur le match actif
+  // scroll vers match actif
   useEffect(() => {
     if (!activeMatchPath) return;
     const el = document.querySelector(`[data-path="${activeMatchPath}"]`);
     if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
   }, [activeMatchPath]);
 
-  const Row = ({ depth, path, children, active }) => (
-    <div
-      data-path={path}
-      style={{
-        paddingLeft: `${depth * 20}px`,
-        paddingTop: "2px",
-        paddingBottom: "2px",
-        background: active ? "#1f1f1f" : "transparent",
-        borderRadius: active ? "6px" : "0px",
-      }}
-    >
-      {children}
-    </div>
-  );
+  const Row = ({ depth, path, children, active }) => {
+    const showCopy = hoveredPath === path;
+
+    return (
+      <div
+        data-path={path}
+        onMouseEnter={() => setHoveredPath(path)}
+        onMouseLeave={() => setHoveredPath((p) => (p === path ? null : p))}
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: "10px",
+          paddingLeft: `${depth * 20}px`,
+          paddingTop: "4px",
+          paddingBottom: "4px",
+          background: active ? "#1f1f1f" : "transparent",
+          borderRadius: active ? "6px" : "0px",
+        }}
+      >
+        <button
+          onClick={async (e) => {
+            e.stopPropagation();
+            await copyToClipboard(path);
+          }}
+          title="Copier le chemin"
+          style={{
+            opacity: showCopy ? 1 : 0,
+            pointerEvents: showCopy ? "auto" : "none",
+            transition: "opacity 120ms ease",
+            cursor: "pointer",
+            borderRadius: "8px",
+            border: "1px solid #444",
+            background: "#1b1b1b",
+            color: "#fff",
+            padding: "2px 8px",
+            lineHeight: 1.2,
+          }}
+        >
+          📋
+        </button>
+
+        <div style={{ flex: 1, minWidth: 0 }}>{children}</div>
+      </div>
+    );
+  };
 
   const renderNode = (name, value, path, depth) => {
     const active = activeMatchPath === path;
@@ -226,8 +373,10 @@ function JsonTree({
     // Primitive
     if (!isObject(value)) {
       const display = typeof value === "string" ? `"${value}"` : String(value);
+
+      // clés : mot entier, valeurs : contient
       const highlightLine =
-        q && (normalize(name).includes(q) || normalize(value).includes(q));
+        q && (includesWholeWord(name, query) || normalize(value).includes(q));
 
       return (
         <Row key={path} depth={depth} path={path} active={active}>
@@ -238,15 +387,16 @@ function JsonTree({
               fontWeight: highlightLine ? 700 : 400,
             }}
           >
-            {name}:
+            {highlightWholeWord(name, query)}:
           </span>{" "}
           <span
             style={{
               color: getValueColor(value),
               fontWeight: highlightLine ? 700 : 400,
+              wordBreak: "break-word",
             }}
           >
-            {display}
+            {highlightAll(display, query)}
           </span>
         </Row>
       );
@@ -266,8 +416,7 @@ function JsonTree({
       <div key={path}>
         <Row depth={depth} path={path} active={active}>
           <button
-            onClick={() => {toggleOpen(path);}}
-
+            onClick={() => toggleOpen(path)}
             style={{
               marginRight: "8px",
               cursor: "pointer",
@@ -289,7 +438,7 @@ function JsonTree({
               opacity: 0.95,
             }}
           >
-            {name}:
+            {highlightWholeWord(name, query)}:
           </span>{" "}
           <span style={{ opacity: 0.9 }}>{preview}</span>
         </Row>
