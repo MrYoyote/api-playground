@@ -19,8 +19,6 @@ function ResponseViewer({ data, error, loading, status, time }) {
     }
   }, [data]);
 
-
-  // Reset navigation quand query change
   useEffect(() => {
     setActiveIndex(0);
   }, [query]);
@@ -29,7 +27,6 @@ function ResponseViewer({ data, error, loading, status, time }) {
   const safeIndex = total ? Math.min(activeIndex, total - 1) : 0;
   const activeMatchPath = total ? matchPaths[safeIndex] : null;
 
-  // Si total change, recadrer l'index
   useEffect(() => {
     if (!total) setActiveIndex(0);
     else if (activeIndex >= total) setActiveIndex(0);
@@ -69,7 +66,14 @@ function ResponseViewer({ data, error, loading, status, time }) {
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Rechercher (clé ou valeur)..."
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                if (e.shiftKey) onPrev();
+                else onNext();
+              }
+            }}
+            placeholder="Rechercher (clé ou valeur)... (Entrée = Suivant, Shift+Entrée = Précédent)"
             style={{
               width: "100%",
               padding: "10px",
@@ -103,9 +107,7 @@ function ResponseViewer({ data, error, loading, status, time }) {
               {canNavigate ? `${safeIndex + 1}/${total}` : "0/0"}
             </div>
 
-            {query && (
-              <button onClick={() => setQuery("")}>Effacer la recherche</button>
-            )}
+            {query && <button onClick={() => setQuery("")}>Effacer la recherche</button>}
           </div>
         </div>
       )}

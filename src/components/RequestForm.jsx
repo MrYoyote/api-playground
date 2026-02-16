@@ -1,49 +1,35 @@
-import { useState } from 'react';
+import { useState } from "react";
 
-function RequestForm({ onSend, history, onClearHistory }) {
-  const [url, setUrl] = useState('');
+function RequestForm({ onSend }) {
+  const [url, setUrl] = useState("");
 
   return (
-    <div>
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        onSend(url);
+      }}
+    >
       <input
         type="text"
-        placeholder="Colle une URL d'API ici..."
+        placeholder="Colle une URL d'API ici... (https://...)"
         value={url}
         onChange={(e) => setUrl(e.target.value)}
         style={{
-            width: '100%',
-            padding: '10px',
-            borderRadius: '8px',
-            border: '1px solid #555',
-            background: '#1b1b1b',
-            color: '#fff',
+          width: "100%",
+          padding: "10px",
+          borderRadius: "8px",
+          border: "1px solid #555",
+          background: "#1b1b1b",
+          color: "#fff",
         }}
       />
 
-        <br /><br />
+      <br />
+      <br />
 
-        <button onClick={() => onSend(url)}>
-            Envoyer
-        </button>
-
-        {history.length > 0 && (
-            <div style={{ marginTop: '20px' }}>
-                <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
-                    <h3>Historique des requêtes:</h3>
-                    <button onClick={onClearHistory}>Effacer l'historique</button>
-                </div>
-                <div style={{ marginTop: "10px" }}>
-                    {history.map((item, index) => (
-                        <div key={index}>
-                            <button onClick={() => onSend(item) }>
-                                {item}
-                            </button>
-                        </div>
-                    ))}
-                </div>
-            </div>
-        )}
-    </div>
+      <button type="submit">Envoyer</button>
+    </form>
   );
 }
 
