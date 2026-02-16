@@ -1,8 +1,10 @@
+import { useState } from "react";
 import JsonTree from "./JsonTree";
 
 function ResponseViewer({ data, error, loading, status, time }) {
-  let parsed = null;
+  const [query, setQuery] = useState("");
 
+  let parsed = null;
   if (data) {
     try {
       parsed = JSON.parse(data);
@@ -18,7 +20,32 @@ function ResponseViewer({ data, error, loading, status, time }) {
       {time && <p>Temps de réponse: {time} ms</p>}
       {error && <p style={{ color: "red" }}>Erreur: {error}</p>}
 
-      {/* Affichage arbre si JSON valide, sinon fallback texte */}
+      {parsed && (
+        <div style={{ margin: "12px 0" }}>
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Rechercher (clé ou valeur)..."
+            style={{
+              width: "100%",
+              padding: "10px",
+              borderRadius: "8px",
+              border: "1px solid #555",
+              background: "#1b1b1b",
+              color: "#fff",
+            }}
+          />
+          {query && (
+            <button
+              onClick={() => setQuery("")}
+              style={{ marginTop: "10px" }}
+            >
+              Effacer la recherche
+            </button>
+          )}
+        </div>
+      )}
+
       {parsed ? (
         <div
           style={{
@@ -30,7 +57,7 @@ function ResponseViewer({ data, error, loading, status, time }) {
             maxHeight: "60vh",
           }}
         >
-          <JsonTree data={parsed} />
+          <JsonTree data={parsed} query={query} />
         </div>
       ) : (
         <pre
