@@ -1,8 +1,14 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import JsonTree from "./JsonTree";
 
 function ResponseViewer({ data, error, loading, status, time }) {
   const [query, setQuery] = useState("");
+
+  const [matchPaths, setMatchPaths] = useState([]);
+  const [activeIndex, setActiveIndex] = useState(0);
+
+  const [treeActionId, setTreeActionId] = useState(0);
+  const [treeAction, setTreeAction] = useState(null);
 
   let parsed = null;
   if (data) {
@@ -12,6 +18,43 @@ function ResponseViewer({ data, error, loading, status, time }) {
       parsed = null;
     }
   }
+
+  // Reset navigation quand la query change
+  useEffect(() => {
+    setActiveIndex(0);
+  }, [query]);
+
+  const total = matchPaths.length;
+  const safeIndex = total ? Math.min(activeIndex, total - 1) : 0;
+  const activeMatchPath = total ? matchPaths[safeIndex] : null;
+
+  // Si la liste de matchs change (ex: nouveau JSON), recadre l'index
+  useEffect(() => {
+    if (!total) setActiveIndex(0);
+    else if (activeIndex >= total) setActiveIndex(0);
+  }, [total, activeIndex]);
+
+  const canNavigate = total > 0;
+
+  const onPrev = () => {
+    if (!total) return;
+    setActiveIndex((i) => (i - 1 + total) % total);
+  };
+
+  const onNext = () => {
+    if (!total) return;
+    setActiveIndex((i) => (i + 1) % total);
+  };
+
+  const doExpandAll = () => {
+    setTreeAction("expandAll");
+    setTreeActionId((x) => x + 1);
+  };
+
+  const doCollapseAll = () => {
+    setTreeAction("collapseAll");
+    setTreeActionId((x) => x + 1);
+  };
 
   return (
     <div>
@@ -35,14 +78,34 @@ function ResponseViewer({ data, error, loading, status, time }) {
               color: "#fff",
             }}
           />
-          {query && (
-            <button
-              onClick={() => setQuery("")}
-              style={{ marginTop: "10px" }}
-            >
-              Effacer la recherche
+
+          <div
+            style={{
+              display: "flex",
+              gap: "10px",
+              flexWrap: "wrap",
+              marginTop: "10px",
+              alignItems: "center",
+            }}
+          >
+            <button onClick={doExpandAll}>Développer tout</button>
+            <button onClick={doCollapseAll}>Réduire tout</button>
+
+            <button disabled={!canNavigate} onClick={onPrev}>
+              Précédent
             </button>
-          )}
+            <button disabled={!canNavigate} onClick={onNext}>
+              Suivant
+            </button>
+
+            <div style={{ opacity: 0.9 }}>
+              {canNavigate ? `${safeIndex + 1}/${total}` : "0/0"}
+            </div>
+
+            {query && (
+              <button onClick={() => setQuery("")}>Effacer la recherche</button>
+            )}
+          </div>
         </div>
       )}
 
@@ -57,7 +120,14 @@ function ResponseViewer({ data, error, loading, status, time }) {
             maxHeight: "60vh",
           }}
         >
-          <JsonTree data={parsed} query={query} />
+          <JsonTree
+            data={parsed}
+            query={query}
+            onMatchesChange={setMatchPaths}
+            activeMatchPath={activeMatchPath}
+            treeActionId={treeActionId}
+            treeAction={treeAction}
+          />
         </div>
       ) : (
         <pre

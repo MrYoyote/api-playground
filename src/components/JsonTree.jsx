@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 function isObject(value) {
   return value !== null && typeof value === "object";
@@ -8,17 +8,23 @@ function normalize(str) {
   return String(str ?? "").toLowerCase();
 }
 
-// Renvoie:
-// - matchSet : paths qui matchent (clé ou valeur)
-// - autoOpenSet : paths à ouvrir (match + parents)
-function buildSearchSets(data, query) {
+/**
+ * Recherche dans tout l'arbre :
+ * - match sur les clés
+ * - match sur les valeurs primitives
+ * Retourne:
+ * - matchPaths: liste des paths matchés (ordre de parcours)
+ * - autoOpenSet: paths à ouvrir (match + parents)
+ */
+function buildSearchIndex(data, query) {
   const q = normalize(query).trim();
+  const matchPaths = [];
   const matchSet = new Set();
   const autoOpenSet = new Set();
 
-  if (!q) return { matchSet, autoOpenSet };
+  if (!q) return { matchPaths, matchSet, autoOpenSet };
 
-  const addPathAndParents = (path) => {
+  const addParents = (path) => {
     const parts = path.split(".");
     let cur = parts[0]; // "root"
     autoOpenSet.add(cur);
@@ -28,12 +34,17 @@ function buildSearchSets(data, query) {
     }
   };
 
+  const addMatch = (path) => {
+    if (!matchSet.has(path)) {
+      matchSet.add(path);
+      matchPaths.push(path);
+      addParents(path);
+    }
+  };
+
   const walk = (value, path) => {
     if (!isObject(value)) {
-      if (normalize(value).includes(q)) {
-        matchSet.add(path);
-        addPathAndParents(path);
-      }
+      if (normalize(value).includes(q)) addMatch(path);
       return;
     }
 
@@ -44,18 +55,13 @@ function buildSearchSets(data, query) {
 
     for (const [k, v] of Object.entries(value)) {
       const childPath = `${path}.${k}`;
-
-      if (normalize(k).includes(q)) {
-        matchSet.add(childPath);
-        addPathAndParents(childPath);
-      }
-
+      if (normalize(k).includes(q)) addMatch(childPath);
       walk(v, childPath);
     }
   };
 
   walk(data, "root");
-  return { matchSet, autoOpenSet };
+  return { matchPaths, matchSet, autoOpenSet };
 }
 
 function getValueColor(val) {
@@ -66,29 +72,93 @@ function getValueColor(val) {
   return "#eee";
 }
 
-function JsonRow({ depth, children }) {
-  return <div style={{ paddingLeft: `${depth * 20}px` }}>{children}</div>;
+// Liste tous les "containers" (objets + arrays) pour expand/collapse all
+function getContainerPaths(value, path = "root", out = []) {
+  if (!isObject(value)) return out;
+
+  out.push(path);
+
+  if (Array.isArray(value)) {
+    value.forEach((v, i) => getContainerPaths(v, `${path}.[${i}]`, out));
+  } else {
+    for (const [k, v] of Object.entries(value)) {
+      getContainerPaths(v, `${path}.${k}`, out);
+    }
+  }
+
+  return out;
 }
 
-function JsonTree({ data, query }) {
+function JsonTree({
+  data,
+  query,
+  onMatchesChange,
+  activeMatchPath,
+  treeAction, // "expandAll" | "collapseAll" | null
+  treeActionId, // number incrementé à chaque clic
+}) {
   const q = normalize(query).trim();
 
-  const { matchSet, autoOpenSet } = useMemo(
-    () => buildSearchSets(data, query),
+  const { matchPaths, matchSet, autoOpenSet } = useMemo(
+    () => buildSearchIndex(data, query),
     [data, query]
   );
 
-  // overrides manuels: path -> bool
+  // Overrides manuels: path -> bool
   const [overrides, setOverrides] = useState({});
+
+  // À chaque changement de recherche, on reset les overrides pour laisser l'auto-open agir
   useEffect(() => {
-    if (normalize(query).trim()) setOverrides({});
+    setOverrides({});
   }, [query]);
 
+  // Informer le parent (ResponseViewer) des matchs
+  useEffect(() => {
+    onMatchesChange?.(matchPaths);
+  }, [onMatchesChange, matchPaths]);
 
+  // Appliquer actions "expand/collapse all"
+  useEffect(() => {
+    if (!treeActionId || !treeAction) return;
+
+    const containers = getContainerPaths(data);
+
+    if (treeAction === "expandAll") {
+      const next = {};
+      for (const p of containers) next[p] = true;
+      setOverrides(next);
+    }
+
+    if (treeAction === "collapseAll") {
+      const next = {};
+      for (const p of containers) next[p] = false;
+      next["root"] = true; // garder root ouvert
+      setOverrides(next);
+    }
+  }, [treeActionId, treeAction, data]);
+
+  // Auto-open renforcé: si on a un match "actif", on force l'ouverture de ses parents
+  const autoOpenWithActiveParents = useMemo(() => {
+    if (!q || !activeMatchPath) return autoOpenSet;
+
+    const set = new Set(autoOpenSet);
+    const parts = activeMatchPath.split(".");
+    let cur = parts[0];
+    set.add(cur);
+    for (let i = 1; i < parts.length; i++) {
+      cur += "." + parts[i];
+      set.add(cur);
+    }
+    return set;
+  }, [autoOpenSet, q, activeMatchPath]);
 
   const computeOpen = (path) => {
-    if (Object.prototype.hasOwnProperty.call(overrides, path)) return overrides[path];
-    if (q) return autoOpenSet.has(path);
+    const hasOverride = Object.prototype.hasOwnProperty.call(overrides, path);
+    if (q){
+        if (hasOverride && overrides[path] === true ) return true; // override manuel pour forcer l'ouverture
+        return autoOpenWithActiveParents.has(path);
+    }
+    if (hasOverride) return overrides[path];
 
     // défaut sans recherche : ouvrir 2 niveaux
     const depth = path.split(".").length - 1;
@@ -102,29 +172,62 @@ function JsonTree({ data, query }) {
     });
   };
 
-  const isMatched = (path) => q && matchSet.has(path);
+  // Scroll sur le match actif
+  useEffect(() => {
+    if (!activeMatchPath) return;
+    const el = document.querySelector(`[data-path="${activeMatchPath}"]`);
+    if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [activeMatchPath]);
+
+  const Row = ({ depth, path, children, active }) => (
+    <div
+      data-path={path}
+      style={{
+        paddingLeft: `${depth * 20}px`,
+        paddingTop: "2px",
+        paddingBottom: "2px",
+        background: active ? "#1f1f1f" : "transparent",
+        borderRadius: active ? "6px" : "0px",
+      }}
+    >
+      {children}
+    </div>
+  );
 
   const renderNode = (name, value, path, depth) => {
-    // primitives
+    const active = activeMatchPath === path;
+
+    // Primitive
     if (!isObject(value)) {
       const display = typeof value === "string" ? `"${value}"` : String(value);
-      const highlight =
-        q && (normalize(name).includes(q) || normalize(value).includes(q));
+      const highlightLine = q && (normalize(name).includes(q) || normalize(value).includes(q));
 
       return (
-        <JsonRow key={path} depth={depth}>
-          <span style={{ color: highlight ? "#fff" : "#B39DDB", opacity: 0.9, fontWeight: highlight ? 700 : 400 }}>
+        <Row key={path} depth={depth} path={path} active={active}>
+          <span
+            style={{
+              color: highlightLine ? "#fff" : "#B39DDB",
+              opacity: 0.9,
+              fontWeight: highlightLine ? 700 : 400,
+            }}
+          >
             {name}:
           </span>{" "}
-          <span style={{ color: getValueColor(value), fontWeight: highlight ? 700 : 400 }}>
+          <span
+            style={{
+              color: getValueColor(value),
+              fontWeight: highlightLine ? 700 : 400,
+            }}
+          >
             {display}
           </span>
-        </JsonRow>
+        </Row>
       );
     }
 
+    // Object / Array
     const open = computeOpen(path);
-    const matched = isMatched(path);
+    const matched = q ? matchSet.has(path) : false;
 
     const isArr = Array.isArray(value);
     const entries = isArr ? value.map((v, i) => [i, v]) : Object.entries(value);
@@ -132,7 +235,7 @@ function JsonTree({ data, query }) {
 
     return (
       <div key={path}>
-        <JsonRow depth={depth}>
+        <Row depth={depth} path={path} active={active}>
           <button
             onClick={() => toggleOpen(path)}
             style={{
@@ -149,11 +252,17 @@ function JsonTree({ data, query }) {
             {open ? "−" : "+"}
           </button>
 
-          <span style={{ color: matched ? "#fff" : "#B39DDB", fontWeight: matched ? 700 : 400, opacity: 0.95 }}>
+          <span
+            style={{
+              color: matched ? "#fff" : "#B39DDB",
+              fontWeight: matched ? 700 : 400,
+              opacity: 0.95,
+            }}
+          >
             {name}:
           </span>{" "}
           <span style={{ opacity: 0.9 }}>{preview}</span>
-        </JsonRow>
+        </Row>
 
         {open && (
           <div>
@@ -171,7 +280,11 @@ function JsonTree({ data, query }) {
   return (
     <div>
       {renderNode("root", data, "root", 0)}
-      {q && <div style={{ marginTop: "12px", opacity: 0.85 }}>Matchs: {matchSet.size}</div>}
+      {q && (
+        <div style={{ marginTop: "12px", opacity: 0.85 }}>
+          Matchs: {matchPaths.length}
+        </div>
+      )}
     </div>
   );
 }
