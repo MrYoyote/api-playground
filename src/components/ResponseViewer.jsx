@@ -10,16 +10,17 @@ function ResponseViewer({ data, error, loading, status, time }) {
   const [treeActionId, setTreeActionId] = useState(0);
   const [treeAction, setTreeAction] = useState(null);
 
-  let parsed = null;
-  if (data) {
+  const parsed = useMemo(() => {
+    if (!data) return null;
     try {
-      parsed = JSON.parse(data);
+      return JSON.parse(data);
     } catch {
-      parsed = null;
+      return null;
     }
-  }
+  }, [data]);
 
-  // Reset navigation quand la query change
+
+  // Reset navigation quand query change
   useEffect(() => {
     setActiveIndex(0);
   }, [query]);
@@ -28,7 +29,7 @@ function ResponseViewer({ data, error, loading, status, time }) {
   const safeIndex = total ? Math.min(activeIndex, total - 1) : 0;
   const activeMatchPath = total ? matchPaths[safeIndex] : null;
 
-  // Si la liste de matchs change (ex: nouveau JSON), recadre l'index
+  // Si total change, recadrer l'index
   useEffect(() => {
     if (!total) setActiveIndex(0);
     else if (activeIndex >= total) setActiveIndex(0);

@@ -14,6 +14,7 @@ function normalize(str) {
  * - match sur les valeurs primitives
  * Retourne:
  * - matchPaths: liste des paths matchés (ordre de parcours)
+ * - matchSet: set des paths matchés
  * - autoOpenSet: paths à ouvrir (match + parents)
  */
 function buildSearchIndex(data, query) {
@@ -104,38 +105,18 @@ function JsonTree({
     [data, query]
   );
 
-  // Overrides manuels: path -> bool
-  const [overrides, setOverrides] = useState({});
-
-  // À chaque changement de recherche, on reset les overrides pour laisser l'auto-open agir
-  useEffect(() => {
-    setOverrides({});
-  }, [query]);
+  // ✅ Nouveau modèle robuste
+  const [forcedOpen, setForcedOpen] = useState(() => new Set());
+  const [forcedClosed, setForcedClosed] = useState(() => new Set());
 
   // Informer le parent (ResponseViewer) des matchs
   useEffect(() => {
     onMatchesChange?.(matchPaths);
-  }, [onMatchesChange, matchPaths]);
+    // ⚠️ on dépend de query/data uniquement via matchPaths recalculé,
+    // mais on évite la boucle en ne mettant PAS matchPaths dans les deps.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query, data]);
 
-  // Appliquer actions "expand/collapse all"
-  useEffect(() => {
-    if (!treeActionId || !treeAction) return;
-
-    const containers = getContainerPaths(data);
-
-    if (treeAction === "expandAll") {
-      const next = {};
-      for (const p of containers) next[p] = true;
-      setOverrides(next);
-    }
-
-    if (treeAction === "collapseAll") {
-      const next = {};
-      for (const p of containers) next[p] = false;
-      next["root"] = true; // garder root ouvert
-      setOverrides(next);
-    }
-  }, [treeActionId, treeAction, data]);
 
   // Auto-open renforcé: si on a un match "actif", on force l'ouverture de ses parents
   const autoOpenWithActiveParents = useMemo(() => {
@@ -153,24 +134,65 @@ function JsonTree({
   }, [autoOpenSet, q, activeMatchPath]);
 
   const computeOpen = (path) => {
-    const hasOverride = Object.prototype.hasOwnProperty.call(overrides, path);
-    if (q){
-        if (hasOverride && overrides[path] === true ) return true; // override manuel pour forcer l'ouverture
-        return autoOpenWithActiveParents.has(path);
-    }
-    if (hasOverride) return overrides[path];
+    if (forcedOpen.has(path)) return true;
+    if (forcedClosed.has(path)) return false;
 
-    // défaut sans recherche : ouvrir 2 niveaux
+    if (q) return autoOpenWithActiveParents.has(path);
+
     const depth = path.split(".").length - 1;
     return depth < 2;
   };
 
   const toggleOpen = (path) => {
-    setOverrides((prev) => {
-      const current = computeOpen(path);
-      return { ...prev, [path]: !current };
-    });
+    const currentlyOpen = computeOpen(path);
+
+    if (currentlyOpen) {
+      // fermer -> forcedClosed
+      setForcedOpen((prev) => {
+        const next = new Set(prev);
+        next.delete(path);
+        return next;
+      });
+      setForcedClosed((prev) => {
+        const next = new Set(prev);
+        next.add(path);
+        return next;
+      });
+    } else {
+      // ouvrir -> forcedOpen
+      setForcedClosed((prev) => {
+        const next = new Set(prev);
+        next.delete(path);
+        return next;
+      });
+      setForcedOpen((prev) => {
+        const next = new Set(prev);
+        next.add(path);
+        return next;
+      });
+    }
   };
+
+  // Appliquer actions "expand/collapse all"
+  useEffect(() => {
+    if (!treeActionId || !treeAction) return;
+
+    const containers = getContainerPaths(data);
+
+    if (treeAction === "expandAll") {
+      setForcedClosed(new Set());
+      setForcedOpen(new Set(containers)); // tout ouvert
+    }
+
+    if (treeAction === "collapseAll") {
+      // tout fermé sauf root
+      const closed = new Set(containers);
+      closed.delete("root");
+
+      setForcedOpen(new Set(["root"]));
+      setForcedClosed(closed);
+    }
+  }, [treeActionId, treeAction, data]);
 
   // Scroll sur le match actif
   useEffect(() => {
@@ -200,7 +222,8 @@ function JsonTree({
     // Primitive
     if (!isObject(value)) {
       const display = typeof value === "string" ? `"${value}"` : String(value);
-      const highlightLine = q && (normalize(name).includes(q) || normalize(value).includes(q));
+      const highlightLine =
+        q && (normalize(name).includes(q) || normalize(value).includes(q));
 
       return (
         <Row key={path} depth={depth} path={path} active={active}>
@@ -231,13 +254,19 @@ function JsonTree({
 
     const isArr = Array.isArray(value);
     const entries = isArr ? value.map((v, i) => [i, v]) : Object.entries(value);
-    const preview = isArr ? `Array(${value.length})` : `Object(${entries.length})`;
+    const preview = isArr
+      ? `[ ${value.length} élément${value.length > 1 ? "s" : ""} ]`
+      : `{ ${entries.length} propriété${entries.length > 1 ? "s" : ""} }`;
 
     return (
       <div key={path}>
         <Row depth={depth} path={path} active={active}>
           <button
-            onClick={() => toggleOpen(path)}
+            onClick={() => {
+                console.log("CLICK +/−", path);
+                toggleOpen(path);
+                }}
+
             style={{
               marginRight: "8px",
               cursor: "pointer",
