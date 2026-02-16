@@ -109,14 +109,18 @@ function JsonTree({
   const [forcedOpen, setForcedOpen] = useState(() => new Set());
   const [forcedClosed, setForcedClosed] = useState(() => new Set());
 
+  useEffect(() => {
+    if (normalize(query).trim()) {
+      setForcedOpen(new Set());
+      setForcedClosed(new Set());
+    }
+  }, [query]);
+
+
   // Informer le parent (ResponseViewer) des matchs
   useEffect(() => {
     onMatchesChange?.(matchPaths);
-    // ⚠️ on dépend de query/data uniquement via matchPaths recalculé,
-    // mais on évite la boucle en ne mettant PAS matchPaths dans les deps.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query, data]);
-
 
   // Auto-open renforcé: si on a un match "actif", on force l'ouverture de ses parents
   const autoOpenWithActiveParents = useMemo(() => {
@@ -262,10 +266,7 @@ function JsonTree({
       <div key={path}>
         <Row depth={depth} path={path} active={active}>
           <button
-            onClick={() => {
-                console.log("CLICK +/−", path);
-                toggleOpen(path);
-                }}
+            onClick={() => {toggleOpen(path);}}
 
             style={{
               marginRight: "8px",
