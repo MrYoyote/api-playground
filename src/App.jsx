@@ -87,6 +87,14 @@ function App() {
 
   const canHaveBody = useMemo(() => ["POST", "PUT", "PATCH"].includes(method), [method]);
 
+  useEffect(() => {
+    const m = String(method).toUpperCase();
+    if (m === "GET" || m === "DELETE") {
+      setBody("");
+    }
+  }, [method]);
+
+
   const clearHistory = () => setHistory([]);
   const removeFromHistory = (id) => setHistory((prev) => prev.filter((x) => x.id !== id));
 
@@ -332,10 +340,10 @@ function App() {
                     loadFromHistory(h);
                     envoyerRequete(h);
                   }}
-                  title="Rejouer cette requête"
+                  title="Recharger cette requête"
                   style={{ whiteSpace: "nowrap" }}
                 >
-                  Rejouer
+                  Recharger
                 </button>
 
                 <div style={{ flex: 1, minWidth: 0 }}>

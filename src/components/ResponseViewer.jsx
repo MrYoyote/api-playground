@@ -161,9 +161,11 @@ function ResponseViewer({ data, error, loading, status, time, onClear }) {
         parsed ? (
           <div
             style={{
-              background: "var(--panel)",
-              border: "1px solid var(--border)",
-              color: "var(--text)",
+              background: "#0b0d12",
+              border: "1px solid rgba(255,255,255,0.12)",
+              color: "#e8e8ea",
+              fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
+              fontSize: 13,
               padding: 18,
               borderRadius: 14,
               overflowX: "auto",
@@ -182,9 +184,11 @@ function ResponseViewer({ data, error, loading, status, time, onClear }) {
         ) : (
           <pre
             style={{
-              background: "var(--panel)",
-              border: "1px solid var(--border)",
-              color: "var(--text)",
+              background: "#0b0d12",
+              border: "1px solid rgba(255,255,255,0.12)",
+              color: "#e8e8ea",
+              fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
+              fontSize: 13,
               padding: 18,
               borderRadius: 14,
               overflowX: "auto",
@@ -199,9 +203,11 @@ function ResponseViewer({ data, error, loading, status, time, onClear }) {
       ) : (
         <pre
           style={{
-            background: "var(--panel)",
-            border: "1px solid var(--border)",
-            color: "var(--text)",
+            background: "#0b0d12",
+            border: "1px solid rgba(255,255,255,0.12)",
+            color: "#e8e8ea",
+            fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
+            fontSize: 13,
             padding: 18,
             borderRadius: 14,
             overflowX: "auto",
